@@ -1,0 +1,102 @@
+[
+  {
+    "id": "1",
+    "title": "Welcome to Life Sync!",
+    "date": "2026-02-01",
+    "description": "This is your first event. Enjoy managing your schedule!",
+    "color": "blue"
+  },
+  {
+    "id": "adb4d794-8de9-4975-92f8-f18af4b68b55",
+    "title": "213",
+    "date": "2026-02-16",
+    "description": "sdafsadf",
+    "color": "blue"
+  },
+  {
+    "id": "fddfd8ca-3337-47b4-ac4c-b84caaea71ad",
+    "title": "sdfasdf",
+    "date": "2026-02-03",
+    "description": "xcvxcv",
+    "color": "blue"
+  },
+  {
+    "id": "f76485b4-e3ee-482f-8940-b115d3ad747c",
+    "title": "aaaa",
+    "date": "2026-02-03",
+    "description": "bbbb",
+    "color": "green"
+  },
+  {
+    "id": "9a052794-7737-4ca3-aa31-26ea618ff6ad",
+    "title": "asdfadf",
+    "date": "2026-02-01",
+    "description": "sadfadf",
+    "color": "blue",
+    "isCompleted": false
+  },
+  {
+    "id": "853b4bdb-5a6a-425c-aebf-f3566ed71f90",
+    "title": "124214",
+    "date": "2026-02-03",
+    "description": "12424",
+    "color": "red",
+    "isCompleted": false
+  },
+  {
+    "id": "4ca3f785-c6f1-4519-ac59-f2aa96ada132",
+    "title": "214124",
+    "date": "2026-02-03",
+    "description": "214214",
+    "color": "green",
+    "isCompleted": false
+  },
+  {
+    "id": "c43f8de0-b212-405b-8431-8d2eff8eeb48",
+    "title": "[Todo] asdfasdfdaf114124",
+    "date": "2026-02-01",
+    "description": "Synced from Todo List",
+    "color": "purple",
+    "isCompleted": false
+  },
+  {
+    "id": "007addd3-b58e-4b5e-8ffc-fc8efc6063f2",
+    "title": "[Todo] ㄴㅁㅇㄻㄴㅇㄹ",
+    "date": "2026-02-01",
+    "description": "Synced from Todo List",
+    "color": "purple",
+    "isCompleted": false
+  },
+  {
+    "id": "de94ee02-e959-40e7-9921-ca65a3db71ab",
+    "title": "[Todo] ㅋㅋㅋㅋㅋㅋㅋ",
+    "date": "2026-02-01",
+    "description": "Synced from Todo List",
+    "color": "red",
+    "isCompleted": false
+  },
+  {
+    "id": "898b8aed-6a06-40ae-be49-6bc2166a3b1e",
+    "title": "214214",
+    "date": "2026-02-01",
+    "description": "ㅇㄴㄻㄴㅇㄹ",
+    "color": "blue",
+    "isCompleted": false
+  },
+  {
+    "id": "bd1622cd-4b8e-4759-b164-4d05df3e23fe",
+    "title": "ㅌ퓨ㅠㄷㄱ",
+    "date": "2026-02-01",
+    "description": "ㄷ규",
+    "color": "red",
+    "isCompleted": false
+  },
+  {
+    "id": "21165b96-22a1-4725-a0ff-583119371441",
+    "title": "214",
+    "date": "2026-02-04",
+    "description": "214",
+    "color": "blue",
+    "isCompleted": false
+  }
+]
