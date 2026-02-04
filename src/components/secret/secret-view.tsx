@@ -2,12 +2,12 @@
 
 import * as React from 'react';
 import { format } from 'date-fns';
-import { 
-  Folder, 
-  FileText, 
-  Plus, 
-  Trash2, 
-  ChevronRight, 
+import {
+  Folder,
+  FileText,
+  Plus,
+  Trash2,
+  ChevronRight,
   ArrowLeft,
   Save,
   Loader2,
@@ -19,66 +19,108 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { SecretItem } from '@/lib/db';
-import { createSecretItem, updateNoteContent, deleteSecretItem, renameSecretItem } from '@/app/actions';
+import { SecretItem, UserProfile } from '@/lib/types';
+import { createSecretItem, updateNoteContent, deleteSecretItem, renameSecretItem, getUserProfile, getSecretItems } from '@/app/actions';
 import { useLanguage } from '@/lib/i18n-context';
 import { Dialog } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/toast';
+import { useAuth } from '@/lib/hooks/use-auth';
 
-interface SecretViewProps {
-  items: SecretItem[];
-}
-
-export function SecretView({ items }: SecretViewProps) {
+export function SecretView() {
   const { t, dateLocale } = useLanguage();
   const { addToast } = useToast();
+  const { userProfile, user } = useAuth();
+
+  const [secretItems, setSecretItems] = React.useState<SecretItem[]>([]);
+  const [isLoadingSecretItems, setIsLoadingSecretItems] = React.useState(true);
+  const [friendsProfiles, setFriendsProfiles] = React.useState<UserProfile[]>([]);
+  
   const [currentFolderId, setCurrentFolderId] = React.useState<string | null>(null);
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
   const [noteContent, setNoteContent] = React.useState('');
-  
-  // View State
   const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
-  
-  // Search State
   const [searchQuery, setSearchQuery] = React.useState('');
-
-  // Dialog State
+  
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false);
   const [createType, setCreateType] = React.useState<'folder' | 'note'>('folder');
   const [newName, setNewName] = React.useState('');
-  
+  const [createSharedWith, setCreateSharedWith] = React.useState<string[]>([]);
+
   const [renameDialogOpen, setRenameDialogOpen] = React.useState(false);
   const [itemToRename, setItemToRename] = React.useState<SecretItem | null>(null);
+  const [renameSharedWith, setRenameSharedWith] = React.useState<string[]>([]);
   
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [itemToDelete, setItemToDelete] = React.useState<SecretItem | null>(null);
 
-  // Derived state
+  const fetchItems = React.useCallback(async () => {
+    if (userProfile?.uid && user) {
+      const idToken = await user.getIdToken();
+      const fetchedItems = await getSecretItems(userProfile.uid, idToken);
+      if (fetchedItems && 'error' in fetchedItems) {
+        console.error("Failed to fetch secret items:", fetchedItems.error);
+        setSecretItems([]);
+      } else {
+        setSecretItems(fetchedItems as SecretItem[]);
+      }
+    }
+  }, [user, userProfile?.uid]);
+
+  React.useEffect(() => {
+    async function initialFetch() {
+      if (userProfile?.uid && user) {
+        setIsLoadingSecretItems(true);
+        await fetchItems();
+        setIsLoadingSecretItems(false);
+      } else if (!user) {
+        setSecretItems([]);
+        setIsLoadingSecretItems(false);
+      }
+    }
+    initialFetch();
+  }, [fetchItems, user, userProfile?.uid]);
+
+  React.useEffect(() => {
+    const fetchFriends = async () => {
+      if (userProfile?.friends && userProfile.friends.length > 0 && user) {
+        try {
+          const idToken = await user.getIdToken();
+          const friendPromises = userProfile.friends.map(uid => getUserProfile(uid, idToken));
+          const profiles = await Promise.all(friendPromises);
+          const validProfiles = profiles.filter(p => p && !('error' in p)) as UserProfile[];
+          setFriendsProfiles(validProfiles);
+        } catch (error) {
+          console.error("Error fetching friends profiles:", error);
+        }
+      } else {
+        setFriendsProfiles([]);
+      }
+    };
+    fetchFriends();
+  }, [userProfile, user]);
+
   const isSearching = searchQuery.length > 0;
   
-  // Filter and Sort items
   const currentItems = React.useMemo(() => {
     let filtered = [];
     if (isSearching) {
-      filtered = items.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      filtered = secretItems.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
     } else {
-      filtered = items.filter(item => item.parentId === currentFolderId);
+      filtered = secretItems.filter(item => item.parentId === currentFolderId);
     }
-
-    // Sort: Folders first, then alphabetical
     return filtered.sort((a, b) => {
       if (a.type === b.type) return a.name.localeCompare(b.name);
       return a.type === 'folder' ? -1 : 1;
     });
-  }, [items, currentFolderId, searchQuery, isSearching]);
+  }, [secretItems, currentFolderId, searchQuery, isSearching]);
 
   const breadcrumbs = React.useMemo(() => {
     if (isSearching) return [];
     const path = [];
     let currentId = currentFolderId;
     while (currentId) {
-      const folder = items.find(i => i.id === currentId);
+      const folder = secretItems.find(i => i.id === currentId);
       if (folder) {
         path.unshift(folder);
         currentId = folder.parentId;
@@ -87,18 +129,19 @@ export function SecretView({ items }: SecretViewProps) {
       }
     }
     return path;
-  }, [currentFolderId, items, isSearching]);
+  }, [currentFolderId, secretItems, isSearching]);
 
-  // Handlers for Dialogs
   const openCreateDialog = (type: 'folder' | 'note') => {
     setCreateType(type);
     setNewName('');
+    setCreateSharedWith([]);
     setCreateDialogOpen(true);
   };
 
   const openRenameDialog = (item: SecretItem) => {
     setItemToRename(item);
     setNewName(item.name);
+    setRenameSharedWith(item.sharedWith || []);
     setRenameDialogOpen(true);
   };
 
@@ -109,24 +152,36 @@ export function SecretView({ items }: SecretViewProps) {
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!newName.trim() || !userProfile?.uid || !user) return;
     
     startTransition(async () => {
-      await createSecretItem(currentFolderId, createType, newName);
+      const idToken = await user.getIdToken();
+      const result = await createSecretItem(currentFolderId, createType, newName, createSharedWith, userProfile.uid, idToken);
+      if (result?.success) {
+        addToast(`${createType === 'folder' ? t('folder') : t('note')} created`, 'success');
+        await fetchItems();
+      } else {
+        console.error("Failed to create secret item:", result?.message);
+      }
       setCreateDialogOpen(false);
-      addToast(`${createType === 'folder' ? t('folder') : t('note')} created`, 'success');
     });
   };
 
   const handleRenameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !itemToRename) return;
+    if (!newName.trim() || !itemToRename || !userProfile?.uid || !user) return;
 
-    if (newName !== itemToRename.name) {
+    if (newName !== itemToRename.name || JSON.stringify(renameSharedWith) !== JSON.stringify(itemToRename.sharedWith || [])) {
       startTransition(async () => {
-        await renameSecretItem(itemToRename.id, newName);
+        const idToken = await user.getIdToken();
+        const result = await renameSecretItem(itemToRename.id, newName, renameSharedWith, userProfile.uid, idToken);
+        if (result?.success) {
+          addToast('Item updated', 'success');
+          await fetchItems();
+        } else {
+          console.error("Failed to rename/update secret item:", result?.message);
+        }
         setRenameDialogOpen(false);
-        addToast('Item renamed', 'success');
       });
     } else {
       setRenameDialogOpen(false);
@@ -134,39 +189,58 @@ export function SecretView({ items }: SecretViewProps) {
   };
 
   const handleDeleteSubmit = () => {
-    if (!itemToDelete) return;
+    if (!itemToDelete || !userProfile?.uid || !user) return;
     startTransition(async () => {
-      await deleteSecretItem(itemToDelete.id);
-      if (editingNoteId === itemToDelete.id) {
-         setEditingNoteId(null);
+      const idToken = await user.getIdToken();
+      const result = await deleteSecretItem(itemToDelete.id, userProfile.uid, idToken);
+      if (result?.success) {
+        if (editingNoteId === itemToDelete.id) setEditingNoteId(null);
+        addToast('Item deleted', 'error');
+        await fetchItems();
+      } else {
+        console.error("Failed to delete secret item:", result?.message);
       }
       setDeleteDialogOpen(false);
-      addToast('Item deleted', 'error');
     });
   };
 
   const handleItemClick = (item: SecretItem) => {
     if (item.type === 'folder') {
       setCurrentFolderId(item.id);
-      setSearchQuery(''); // Clear search when entering folder
+      setSearchQuery('');
     } else {
       setEditingNoteId(item.id);
       setNoteContent(item.content || '');
     }
   };
 
-  const handleSaveNote = () => {
-    if (editingNoteId) {
+  const handleSaveNote = async () => {
+    if (editingNoteId && userProfile?.uid && user) {
       startTransition(async () => {
-        await updateNoteContent(editingNoteId, noteContent);
-        addToast('Note saved', 'success');
+        const idToken = await user.getIdToken();
+        const result = await updateNoteContent(editingNoteId, noteContent, userProfile.uid, idToken);
+        if (result?.success) {
+          addToast('Note saved', 'success');
+          await fetchItems();
+        } else {
+          console.error("Failed to save note:", result?.message);
+        }
       });
     }
   };
+  
+  const handleCreateShareToggle = (uid: string) => {
+    setCreateSharedWith(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+  };
+  
+  const handleRenameShareToggle = (uid: string) => {
+    setRenameSharedWith(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+  };
 
+  const note = editingNoteId ? secretItems.find(i => i.id === editingNoteId) : null;
   if (editingNoteId) {
-    const note = items.find(i => i.id === editingNoteId);
-    if (!note) return null; // Should handle error
+     if (isLoadingSecretItems) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+     if (!note) return <div>Note not found. <Button onClick={() => setEditingNoteId(null)}>Go Back</Button></div>;
 
     return (
       <div className="max-w-5xl mx-auto w-full px-4 py-8 h-[calc(100vh-65px)] flex flex-col">
@@ -185,7 +259,7 @@ export function SecretView({ items }: SecretViewProps) {
             {isPending ? t('saving') : t('save')}
           </Button>
         </div>
-        <textarea 
+        <textarea
           className="flex-1 w-full p-4 rounded-xl border bg-card resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono text-sm leading-relaxed"
           value={noteContent}
           onChange={(e) => setNoteContent(e.target.value)}
@@ -203,11 +277,11 @@ export function SecretView({ items }: SecretViewProps) {
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
              {t('secretSpace')}
           </h2>
-          
+
           {/* Breadcrumbs */}
           {!isSearching && (
             <div className="flex items-center gap-1 text-sm text-muted-foreground overflow-x-auto pb-2">
-              <button 
+              <button
                  onClick={() => setCurrentFolderId(null)}
                  className={cn("hover:text-primary transition-colors", !currentFolderId && "font-bold text-primary")}
               >
@@ -216,7 +290,7 @@ export function SecretView({ items }: SecretViewProps) {
               {breadcrumbs.map((folder) => (
                 <React.Fragment key={folder.id}>
                   <ChevronRight className="w-4 h-4 flex-shrink-0" />
-                  <button 
+                  <button
                     onClick={() => setCurrentFolderId(folder.id)}
                     className={cn("hover:text-primary transition-colors whitespace-nowrap", folder.id === currentFolderId && "font-bold text-primary")}
                   >
@@ -232,15 +306,15 @@ export function SecretView({ items }: SecretViewProps) {
         <div className="flex flex-col sm:flex-row gap-3">
            <div className="relative">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-             <input 
-               type="text" 
-               placeholder={t('searchPlaceholder')} 
+             <input
+               type="text"
+               placeholder={t('searchPlaceholder')}
                value={searchQuery}
                onChange={(e) => setSearchQuery(e.target.value)}
                className="w-full sm:w-64 h-10 pl-9 pr-8 rounded-md border bg-transparent text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
              />
              {searchQuery && (
-               <button 
+               <button
                  onClick={() => setSearchQuery('')}
                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                >
@@ -248,7 +322,7 @@ export function SecretView({ items }: SecretViewProps) {
                </button>
              )}
            </div>
-           
+
            <div className="flex items-center gap-2">
              {/* View Toggle */}
              <div className="flex bg-muted p-1 rounded-md">
@@ -282,145 +356,155 @@ export function SecretView({ items }: SecretViewProps) {
         </div>
       </div>
 
-      {/* Grid View */}
-      {viewMode === 'grid' && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {currentItems.length === 0 ? (
-             <div className="col-span-full py-12 text-center text-muted-foreground border-2 border-dashed rounded-xl">
-               {isSearching ? 'No results found.' : 'Empty folder'}
-             </div>
-          ) : (
-             currentItems.map((item) => (
-               <div 
-                 key={item.id}
-                 className="group relative flex flex-col items-center justify-center p-6 rounded-xl border bg-card hover:bg-muted/50 transition-all cursor-pointer aspect-square"
-                 onClick={() => handleItemClick(item)}
-               >
-                 {item.type === 'folder' ? (
-                   <Folder className="w-12 h-12 text-yellow-500 mb-3" />
-                 ) : (
-                   <FileText className="w-12 h-12 text-blue-500 mb-3" />
-                 )}
-                 <span className="text-sm font-medium text-center break-all line-clamp-2">
-                   {item.name}
-                 </span>
-                 
-                 {/* Hover Actions */}
-                 <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button 
-                     onClick={(e) => {
-                       e.stopPropagation();
-                       openRenameDialog(item);
-                     }}
-                     className="p-1.5 text-muted-foreground hover:text-primary hover:bg-background rounded-full transition-all shadow-sm"
-                     title={t('rename')}
-                   >
-                     <Edit2 className="w-3 h-3" />
-                   </button>
-                   <button 
-                     onClick={(e) => {
-                       e.stopPropagation();
-                       openDeleteDialog(item);
-                     }}
-                     className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-background rounded-full transition-all shadow-sm"
-                     title={t('delete')}
-                   >
-                     <Trash2 className="w-3 h-3" />
-                   </button>
-                 </div>
-               </div>
-             ))
-          )}
+      {/* Item List / Loading State */}
+      {isLoadingSecretItems ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
+          <Loader2 className="w-5 h-5 animate-spin mx-auto mb-4" />
+          {t('loadingSecretItems')}
         </div>
-      )}
-
-      {/* List View */}
-      {viewMode === 'list' && (
-        <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
-              <tr>
-                <th className="px-4 py-3 pl-6">{t('name')}</th>
-                <th className="px-4 py-3 w-32">{t('fileType')}</th>
-                <th className="px-4 py-3 w-48">{t('dateModified')}</th>
-                <th className="px-4 py-3 w-20 text-center">{t('actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
+      ) : (
+        <>
+          {/* Grid View */}
+          {viewMode === 'grid' && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {currentItems.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
-                    {isSearching ? 'No results found.' : 'Empty folder'}
-                  </td>
-                </tr>
+                 <div className="col-span-full py-12 text-center text-muted-foreground border-2 border-dashed rounded-xl">
+                   {isSearching ? t('noResults') : t('emptyFolder')}
+                 </div>
               ) : (
-                currentItems.map((item) => (
-                  <tr 
-                    key={item.id} 
-                    className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
-                    onClick={() => handleItemClick(item)}
-                  >
-                    <td className="px-4 py-3 pl-6">
-                      <div className="flex items-center gap-3">
-                        {item.type === 'folder' ? (
-                          <Folder className="w-5 h-5 text-yellow-500" />
-                        ) : (
-                          <FileText className="w-5 h-5 text-blue-500" />
-                        )}
-                        <span className="font-medium text-foreground">{item.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground capitalize">
-                      {t(item.type)}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {format(new Date(item.updatedAt), 'PP p', { locale: dateLocale })}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openRenameDialog(item);
-                          }}
-                          className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                          title={t('rename')}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteDialog(item);
-                          }}
-                          className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                          title={t('delete')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                 currentItems.map((item) => (
+                   <div
+                     key={item.id}
+                     className="group relative flex flex-col items-center justify-center p-6 rounded-xl border bg-card hover:bg-muted/50 transition-all cursor-pointer aspect-square"
+                     onClick={() => handleItemClick(item)}
+                   >
+                     {item.type === 'folder' ? (
+                       <Folder className="w-12 h-12 text-yellow-500 mb-3" />
+                     ) : (
+                       <FileText className="w-12 h-12 text-blue-500 mb-3" />
+                     )}
+                     <span className="text-sm font-medium text-center break-all line-clamp-2">
+                       {item.name}
+                     </span>
+
+                     {/* Hover Actions */}
+                     <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           openRenameDialog(item);
+                         }}
+                         className="p-1.5 text-muted-foreground hover:text-primary hover:bg-background rounded-full transition-all shadow-sm"
+                         title={t('rename')}
+                       >
+                         <Edit2 className="w-3 h-3" />
+                       </button>
+                       <button
+                         onClick={(e) => {
+                           e.stopPropagation();
+                           openDeleteDialog(item);
+                         }}
+                         className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-background rounded-full transition-all shadow-sm"
+                         title={t('delete')}
+                       >
+                         <Trash2 className="w-3 h-3" />
+                       </button>
+                     </div>
+                   </div>
+                 ))
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="bg-card rounded-xl shadow-sm border overflow-hidden">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs text-muted-foreground uppercase bg-muted/50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 pl-6">{t('name')}</th>
+                    <th className="px-4 py-3 w-32">{t('fileType')}</th>
+                    <th className="px-4 py-3 w-48">{t('dateModified')}</th>
+                    <th className="px-4 py-3 w-20 text-center">{t('actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground">
+                        {isSearching ? t('noResults') : t('emptyFolder')}
+                      </td>
+                    </tr>
+                  ) : (
+                    currentItems.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="border-b last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => handleItemClick(item)}
+                      >
+                        <td className="px-4 py-3 pl-6">
+                          <div className="flex items-center gap-3">
+                            {item.type === 'folder' ? (
+                              <Folder className="w-5 h-5 text-yellow-500" />
+                            ) : (
+                              <FileText className="w-5 h-5 text-blue-500" />
+                            )}
+                            <span className="font-medium text-foreground">{item.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground capitalize">
+                          {t(item.type)}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {item.updatedAt ? format(new Date(item.updatedAt), 'PP p', { locale: dateLocale }) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openRenameDialog(item);
+                              }}
+                              className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                              title={t('rename')}
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDeleteDialog(item);
+                              }}
+                              className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                              title={t('delete')}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {/* Dialogs */}
-      
+
       {/* Create Dialog */}
-      <Dialog 
-        isOpen={createDialogOpen} 
-        onClose={() => setCreateDialogOpen(false)} 
+      <Dialog
+        isOpen={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
         title={createType === 'folder' ? t('createFolder') : t('createNote')}
       >
         <form onSubmit={handleCreateSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{t('name')}</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder={t('namePlaceholder')}
@@ -428,6 +512,27 @@ export function SecretView({ items }: SecretViewProps) {
               autoFocus
             />
           </div>
+          {friendsProfiles.length > 0 && createType === 'note' && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Share with friends</label>
+              <div className="flex flex-wrap gap-2">
+                {friendsProfiles.map(friend => (
+                  <div key={friend.uid} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`share-create-${friend.uid}`}
+                      checked={createSharedWith.includes(friend.uid)}
+                      onChange={() => handleCreateShareToggle(friend.uid)}
+                      className="form-checkbox h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary"
+                    />
+                    <label htmlFor={`share-create-${friend.uid}`} className="text-sm text-muted-foreground">
+                      {friend.displayName || friend.email}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setCreateDialogOpen(false)}>
               {t('cancel')}
@@ -440,16 +545,16 @@ export function SecretView({ items }: SecretViewProps) {
       </Dialog>
 
       {/* Rename Dialog */}
-      <Dialog 
-        isOpen={renameDialogOpen} 
-        onClose={() => setRenameDialogOpen(false)} 
+      <Dialog
+        isOpen={renameDialogOpen}
+        onClose={() => setRenameDialogOpen(false)}
         title={t('rename')}
       >
         <form onSubmit={handleRenameSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">{t('name')}</label>
-            <input 
-              type="text" 
+            <input
+              type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder={t('namePlaceholder')}
@@ -457,6 +562,27 @@ export function SecretView({ items }: SecretViewProps) {
               autoFocus
             />
           </div>
+          {friendsProfiles.length > 0 && itemToRename?.type === 'note' && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-muted-foreground mb-1">Share with friends</label>
+              <div className="flex flex-wrap gap-2">
+                {friendsProfiles.map(friend => (
+                  <div key={friend.uid} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`share-rename-${friend.uid}`}
+                      checked={renameSharedWith.includes(friend.uid)}
+                      onChange={() => handleRenameShareToggle(friend.uid)}
+                      className="form-checkbox h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary"
+                    />
+                    <label htmlFor={`share-rename-${friend.uid}`} className="text-sm text-muted-foreground">
+                      {friend.displayName || friend.email}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => setRenameDialogOpen(false)}>
               {t('cancel')}
@@ -469,9 +595,9 @@ export function SecretView({ items }: SecretViewProps) {
       </Dialog>
 
       {/* Delete Dialog */}
-      <Dialog 
-        isOpen={deleteDialogOpen} 
-        onClose={() => setDeleteDialogOpen(false)} 
+      <Dialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
         title={t('delete')}
       >
         <div className="space-y-4">

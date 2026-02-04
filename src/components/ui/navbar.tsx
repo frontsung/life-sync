@@ -9,15 +9,20 @@ import { useSidebar } from "@/lib/sidebar-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+import { useAuth } from "@/lib/hooks/use-auth";
+
 export function Navbar() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage, t } = useLanguage();
   const { toggle } = useSidebar();
   const [mounted, setMounted] = React.useState(false);
+  const { user } = useAuth();
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+
 
   if (!mounted) {
     return (
@@ -44,9 +49,11 @@ export function Navbar() {
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center gap-2 sm:gap-4">
              {/* Mobile Menu Toggle */}
-             <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggle}>
-               <Menu className="w-5 h-5" />
-             </Button>
+             {user && (
+                <Button variant="ghost" size="icon" className="lg:hidden" onClick={toggle}>
+                  <Menu className="w-5 h-5" />
+                </Button>
+             )}
 
              <Link href="/" className="flex items-center gap-2">
                <div className="bg-primary/10 p-2 rounded-lg">

@@ -18,56 +18,151 @@ import {
 import { ChevronLeft, ChevronRight, Plus, Trash2, Check, Edit2, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { CalendarEvent } from '@/lib/db';
-import { addEvent, deleteEvent, updateEvent } from '@/app/actions';
+import { CalendarEvent, UserProfile } from '@/lib/types';
+import { addEvent, deleteEvent, updateEvent, getUserProfile, getEvents } from '@/app/actions';
 import { useLanguage } from '@/lib/i18n-context';
+import { useAuth } from '@/lib/hooks/use-auth';
 
-interface CalendarViewProps {
-  events: CalendarEvent[];
-}
-
-export function CalendarView({ events }: CalendarViewProps) {
+export function CalendarView() {
   const [currentMonth, setCurrentMonth] = React.useState(new Date());
   const [selectedDate, setSelectedDate] = React.useState<Date>(new Date());
   const [isPending, startTransition] = React.useTransition();
   const { t, dateLocale } = useLanguage();
+  const { userProfile, user } = useAuth();
 
-  // Edit State
+  const [events, setEvents] = React.useState<CalendarEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = React.useState(true);
+  const [friendsProfiles, setFriendsProfiles] = React.useState<UserProfile[]>([]);
   const [editingEvent, setEditingEvent] = React.useState<CalendarEvent | null>(null);
-  
-  // Refs for form inputs when editing (to populate values)
-  // Or better, just controlled inputs for the form to handle both Add and Edit
   const [formState, setFormState] = React.useState({
     title: '',
     description: '',
-    color: 'blue' as CalendarEvent['color']
+    color: 'blue' as CalendarEvent['color'],
+    sharedWith: [] as string[]
   });
 
-  // Reset form when date changes or successful submit
+  const fetchEvents = React.useCallback(async () => {
+    if (userProfile?.uid && user) {
+      const idToken = await user.getIdToken();
+      const fetchedEvents = await getEvents(userProfile.uid, idToken);
+      if (fetchedEvents && 'error' in fetchedEvents) {
+        console.error("Failed to fetch events:", fetchedEvents.error);
+        setEvents([]);
+      } else {
+        setEvents(fetchedEvents as CalendarEvent[]);
+      }
+    }
+  }, [user, userProfile?.uid]);
+
   React.useEffect(() => {
-    setFormState({ title: '', description: '', color: 'blue' });
+    async function initialFetch() {
+      if (userProfile?.uid && user) {
+        setIsLoadingEvents(true);
+        await fetchEvents();
+        setIsLoadingEvents(false);
+      }
+    }
+    initialFetch();
+  }, [fetchEvents, user, userProfile?.uid]);
+
+  React.useEffect(() => {
+    const fetchFriends = async () => {
+      if (userProfile?.friends && userProfile.friends.length > 0 && user) {
+        try {
+          const idToken = await user.getIdToken();
+          const friendPromises = userProfile.friends.map(uid => getUserProfile(uid, idToken));
+          const profiles = await Promise.all(friendPromises);
+          const validProfiles = profiles.filter(p => p && !('error' in p)) as UserProfile[];
+          setFriendsProfiles(validProfiles);
+        } catch (error) {
+          console.error("Error fetching friends profiles:", error);
+          setFriendsProfiles([]);
+        }
+      } else {
+        setFriendsProfiles([]);
+      }
+    };
+    fetchFriends();
+  }, [userProfile, user]);
+
+  React.useEffect(() => {
+    setFormState({ title: '', description: '', color: 'blue', sharedWith: [] });
     setEditingEvent(null);
   }, [selectedDate]);
 
-  // When editing event changes, populate form
   React.useEffect(() => {
     if (editingEvent) {
       setFormState({
         title: editingEvent.title,
         description: editingEvent.description || '',
-        color: editingEvent.color
+        color: editingEvent.color,
+        sharedWith: editingEvent.sharedWith || []
       });
     } else {
-      setFormState({ title: '', description: '', color: 'blue' });
+      setFormState({ title: '', description: '', color: 'blue', sharedWith: [] });
     }
   }, [editingEvent]);
+
+  const handleCancelEdit = () => {
+    setEditingEvent(null);
+  };
+
+  const handleShareToggle = (uid: string) => {
+    setFormState(prevState => {
+      const currentSharedWith = prevState.sharedWith || [];
+      if (currentSharedWith.includes(uid)) {
+        return { ...prevState, sharedWith: currentSharedWith.filter(id => id !== uid) };
+      } else {
+        return { ...prevState, sharedWith: [...currentSharedWith, uid] };
+      }
+    });
+  };
 
   const handleEditClick = (event: CalendarEvent) => {
     setEditingEvent(event);
   };
+  
+  const handleDelete = (eventId: string) => {
+    startTransition(async () => {
+      if (!user || !userProfile?.uid) {
+        console.error("User not authenticated for deleting event.");
+        return;
+      }
+      const idToken = await user.getIdToken();
+      const deleteResult = await deleteEvent(eventId, userProfile.uid, idToken);
+      if (deleteResult && !deleteResult.success) {
+        console.error("Failed to delete event:", deleteResult.message);
+      } else {
+        await fetchEvents();
+      }
+    });
+  };
+  
+  const handleFormSubmit = (formData: FormData) => {
+    startTransition(async () => {
+      if (!user || !userProfile?.uid) {
+        console.error("User not authenticated for adding/updating event.");
+        return;
+      }
+      const idToken = await user.getIdToken();
+      formData.append('ownerUid', userProfile.uid);
 
-  const handleCancelEdit = () => {
-    setEditingEvent(null);
+      if (editingEvent) {
+        const updateResult = await updateEvent(null, formData, idToken);
+        if (updateResult && !updateResult.success) {
+          console.error("Failed to update event:", updateResult.message);
+        }
+      } else {
+        const addResult = await addEvent(null, formData, idToken);
+        if (addResult && !addResult.success) {
+          console.error("Failed to add event:", addResult.message);
+        }
+      }
+      
+      setEditingEvent(null);
+      setFormState({ title: '', description: '', color: 'blue', sharedWith: [] });
+      await fetchEvents();
+    });
   };
 
   const renderHeader = () => {
@@ -82,16 +177,16 @@ export function CalendarView({ events }: CalendarViewProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="icon" 
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
           >
             <ChevronLeft className="w-4 h-4" />
           </Button>
-          <Button 
-            variant="outline" 
-            size="icon" 
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
           >
             <ChevronRight className="w-4 h-4" />
@@ -133,7 +228,6 @@ export function CalendarView({ events }: CalendarViewProps) {
         formattedDate = format(day, dateFormat, { locale: dateLocale });
         const cloneDay = day;
         
-        // Check for events on this day
         const dayEvents = events.filter(e => isSameDay(parseISO(e.date), day));
         
         days.push(
@@ -160,25 +254,31 @@ export function CalendarView({ events }: CalendarViewProps) {
             </div>
             
             <div className="flex flex-col gap-1 mt-1 overflow-hidden">
-              {dayEvents.slice(0, 3).map((event) => (
-                <div 
-                  key={event.id} 
-                  className={cn(
-                    "text-[10px] sm:text-xs truncate px-1.5 py-0.5 rounded-sm font-semibold flex items-center gap-1",
-                    event.isCompleted ? "opacity-60 line-through" : "",
-                    {
-                      'bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-100': event.color === 'blue',
-                      'bg-red-100 text-red-900 dark:bg-red-900/30 dark:text-red-100': event.color === 'red',
-                      'bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-100': event.color === 'green',
-                      'bg-purple-100 text-purple-900 dark:bg-purple-900/30 dark:text-purple-100': event.color === 'purple',
-                      'bg-orange-100 text-orange-900 dark:bg-orange-900/30 dark:text-orange-100': event.color === 'orange',
-                    }
-                  )}
-                >
-                  {event.isCompleted && <Check className="w-2.5 h-2.5 flex-shrink-0" />}
-                  <span className="truncate">{event.title}</span>
+              {isLoadingEvents ? (
+                <div className="flex justify-center items-center h-full">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                 </div>
-              ))}
+              ) : (
+                dayEvents.slice(0, 3).map((event) => (
+                  <div
+                    key={event.id}
+                    className={cn(
+                      "text-[10px] sm:text-xs truncate px-1.5 py-0.5 rounded-sm font-semibold flex items-center gap-1",
+                      event.isCompleted ? "opacity-60 line-through" : "",
+                      {
+                        'bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-100': event.color === 'blue',
+                        'bg-red-100 text-red-900 dark:bg-red-900/30 dark:text-red-100': event.color === 'red',
+                        'bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-100': event.color === 'green',
+                        'bg-purple-100 text-purple-900 dark:bg-purple-900/30 dark:text-purple-900': event.color === 'purple',
+                        'bg-orange-100 text-orange-900 dark:bg-orange-900/30 dark:text-orange-900': event.color === 'orange',
+                      }
+                    )}
+                  >
+                    {event.isCompleted && <Check className="w-2.5 h-2.5 flex-shrink-0" />}
+                    <span className="truncate">{event.title}</span>
+                  </div>
+                ))
+              )}
               {dayEvents.length > 3 && (
                 <span className="text-[10px] text-muted-foreground pl-1">
                   +{dayEvents.length - 3} {t('more')}
@@ -199,7 +299,7 @@ export function CalendarView({ events }: CalendarViewProps) {
     return <div className="bg-card rounded-xl shadow-sm border overflow-hidden">{rows}</div>;
   };
 
-  const selectedDayEvents = events.filter(e => isSameDay(parseISO(e.date), selectedDate));
+  const selectedDayEvents = (events || []).filter(e => isSameDay(parseISO(e.date), selectedDate));
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
@@ -209,7 +309,6 @@ export function CalendarView({ events }: CalendarViewProps) {
         {renderCells()}
       </div>
       
-      {/* Sidebar / Details Panel */}
       <div className="w-full lg:w-96 flex flex-col gap-6">
         <div className="bg-card rounded-xl shadow-sm border p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -217,62 +316,68 @@ export function CalendarView({ events }: CalendarViewProps) {
           </h3>
           
           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            {selectedDayEvents.length === 0 ? (
+            {isLoadingEvents ? (
               <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
-                {t('noEvents')}
+                <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" />
+                {t('loadingEvents')}
               </div>
             ) : (
-              selectedDayEvents.map(event => (
-                <div 
-                  key={event.id} 
-                  className={cn(
-                    "group flex flex-col gap-2 p-3 rounded-lg border bg-muted/30 hover:bg-muted transition-colors relative",
-                    event.isCompleted ? "opacity-60 bg-muted/20" : "",
-                    editingEvent?.id === event.id ? "ring-2 ring-primary bg-muted" : ""
-                  )}
-                >
-                  <div className="flex justify-between items-start">
-                    <h4 className={cn("font-medium text-sm", event.isCompleted ? "line-through text-muted-foreground" : "")}>
-                      {event.isCompleted && <Check className="inline w-3.5 h-3.5 mr-1.5 text-green-500" />}
-                      {event.title}
-                    </h4>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button 
-                         onClick={() => handleEditClick(event)}
-                         className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                         title={t('edit')}
-                      >
-                         <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => startTransition(() => deleteEvent(event.id))}
-                        className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                        title={t('delete')}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+              selectedDayEvents.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed rounded-lg">
+                  {t('noEvents')}
+                </div>
+              ) : (
+                selectedDayEvents.map(event => (
+                  <div
+                    key={event.id}
+                    className={cn(
+                      "group flex flex-col gap-2 p-3 rounded-lg border bg-muted/30 hover:bg-muted transition-colors relative",
+                      event.isCompleted ? "opacity-60 bg-muted/20" : "",
+                      editingEvent?.id === event.id ? "ring-2 ring-primary bg-muted" : ""
+                    )}
+                  >
+                    <div className="flex justify-between items-start">
+                      <h4 className={cn("font-medium text-sm", event.isCompleted ? "line-through text-muted-foreground" : "")}>
+                        {event.isCompleted && <Check className="inline w-3.5 h-3.5 mr-1.5 text-green-500" />}
+                        {event.title}
+                      </h4>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                           onClick={() => handleEditClick(event)}
+                           className="p-1 text-muted-foreground hover:text-primary transition-colors"
+                           title={t('edit')}
+                        >
+                           <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(event.id)}
+                          className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                          title={t('delete')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {event.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                       <span className={cn("w-2 h-2 rounded-full", {
+                          'bg-blue-500': event.color === 'blue',
+                          'bg-red-500': event.color === 'red',
+                          'bg-green-500': event.color === 'green',
+                          'bg-purple-500': event.color === 'purple',
+                          'bg-orange-500': event.color === 'orange',
+                       })} />
+                       <span className="text-xs text-muted-foreground capitalize">{t('label')}: {event.color}</span>
                     </div>
                   </div>
-                  {event.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{event.description}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1">
-                     <span className={cn("w-2 h-2 rounded-full", {
-                        'bg-blue-500': event.color === 'blue',
-                        'bg-red-500': event.color === 'red',
-                        'bg-green-500': event.color === 'green',
-                        'bg-purple-500': event.color === 'purple',
-                        'bg-orange-500': event.color === 'orange',
-                     })} />
-                     <span className="text-xs text-muted-foreground capitalize">{t('label')}: {event.color}</span>
-                  </div>
-                </div>
-              ))
+                ))
+              )
             )}
           </div>
         </div>
 
-        {/* Add/Edit Form */}
         <div className="bg-card rounded-xl shadow-sm border p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center justify-between">
             <span className="flex items-center gap-2">
@@ -285,25 +390,21 @@ export function CalendarView({ events }: CalendarViewProps) {
               </Button>
             )}
           </h3>
-          <form action={async (formData) => {
-              if (editingEvent) {
-                await updateEvent(null, formData);
-                setEditingEvent(null);
-                setFormState({ title: '', description: '', color: 'blue' }); // Reset form
-              } else {
-                await addEvent(null, formData);
-                setFormState({ title: '', description: '', color: 'blue' }); // Reset form
-              }
-            }} className="space-y-4">
+          <form action={handleFormSubmit} className="space-y-4">
             
             <input type="hidden" name="id" value={editingEvent?.id || ''} />
             <input type="hidden" name="date" value={format(selectedDate, 'yyyy-MM-dd')} />
+            {formState.sharedWith.map(uid => (
+              <input type="hidden" name="sharedWith" value={uid} key={uid} />
+            ))}
+            
+            <input type="hidden" name="ownerUid" value={userProfile?.uid || ''} />
             
             <div>
               <label htmlFor="title" className="block text-xs font-medium text-muted-foreground mb-1">{t('eventTitle')}</label>
-              <input 
+              <input
                 required
-                type="text" 
+                type="text"
                 id="title"
                 name="title"
                 value={formState.title}
@@ -315,7 +416,7 @@ export function CalendarView({ events }: CalendarViewProps) {
             
             <div>
               <label htmlFor="description" className="block text-xs font-medium text-muted-foreground mb-1">{t('description')}</label>
-              <textarea 
+              <textarea
                 id="description"
                 name="description"
                 value={formState.description}
@@ -330,11 +431,11 @@ export function CalendarView({ events }: CalendarViewProps) {
               <div className="flex gap-3">
                 {['blue', 'red', 'green', 'purple', 'orange'].map((color) => (
                   <label key={color} className="cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="color" 
-                      value={color} 
-                      className="peer sr-only" 
+                    <input
+                      type="radio"
+                      name="color"
+                      value={color}
+                      className="peer sr-only"
                       checked={formState.color === color}
                       onChange={() => setFormState({...formState, color: color as CalendarEvent['color']})}
                     />
@@ -352,6 +453,28 @@ export function CalendarView({ events }: CalendarViewProps) {
                 ))}
               </div>
             </div>
+
+            {friendsProfiles.length > 0 && (
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Share with friends</label>
+                <div className="flex flex-wrap gap-2">
+                  {friendsProfiles.map(friend => (
+                    <div key={friend.uid} className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id={`share-${friend.uid}`}
+                        checked={formState.sharedWith.includes(friend.uid)}
+                        onChange={() => handleShareToggle(friend.uid)}
+                        className="form-checkbox h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary"
+                      />
+                      <label htmlFor={`share-${friend.uid}`} className="text-sm text-muted-foreground">
+                        {friend.displayName || friend.email}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             
             <Button type="submit" className="w-full" disabled={isPending}>
               {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingEvent ? t('save') : t('addEvent'))}

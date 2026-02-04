@@ -7,10 +7,9 @@ import {
   Calendar as CalendarIcon, 
   CheckSquare, 
   Wallet, 
-  ArrowRight,
-  TrendingUp
+  ArrowRight
 } from 'lucide-react';
-import { CalendarEvent, Todo, Transaction } from '@/lib/db';
+import { CalendarEvent, Todo, Transaction } from '@/lib/types';
 import { useLanguage } from '@/lib/i18n-context';
 import { cn } from '@/lib/utils';
 

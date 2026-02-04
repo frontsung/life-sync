@@ -5,6 +5,7 @@ import { ThemeProvider as NextThemesProvider } from 'next-themes';
 import { LanguageProvider } from '@/lib/i18n-context';
 import { SidebarProvider } from '@/lib/sidebar-context';
 import { ToastProvider } from '@/components/ui/toast';
+import { AuthProvider } from '@/lib/hooks/use-auth';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   // We should always wrap children with providers.
@@ -12,14 +13,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
   // Unwrapping providers here causes 'useContext' to fail in child components during initial render.
   
   return (
-    <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
-      <LanguageProvider>
-        <SidebarProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
-        </SidebarProvider>
-      </LanguageProvider>
-    </NextThemesProvider>
+    <AuthProvider>
+      <NextThemesProvider attribute="class" defaultTheme="system" enableSystem>
+        <LanguageProvider>
+          <SidebarProvider>
+            <ToastProvider>
+              {children}
+            </ToastProvider>
+          </SidebarProvider>
+        </LanguageProvider>
+      </NextThemesProvider>
+    </AuthProvider>
   );
 }

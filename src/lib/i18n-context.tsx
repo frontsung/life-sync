@@ -76,6 +76,13 @@ export const dictionaries = {
     name: 'Name',
     dateModified: 'Date Modified',
     fileType: 'Type',
+    welcome: 'Welcome to Life Sync',
+    signInMessage: 'Sign in to manage your life.',
+    getStarted: 'Get Started',
+    loading: 'Loading...',
+    googleLogin: 'Sign in with Google',
+    or: 'Or',
+    guestLogin: 'Continue as Guest',
   },
   ko: {
     appTitle: 'Life Sync',
@@ -147,6 +154,13 @@ export const dictionaries = {
     name: '이름',
     dateModified: '수정한 날짜',
     fileType: '유형',
+    welcome: 'Life Sync에 오신 것을 환영합니다',
+    signInMessage: '로그인하여 당신의 삶을 관리하세요.',
+    getStarted: '시작하기',
+    loading: '로딩 중...',
+    googleLogin: 'Google로 로그인',
+    or: '또는',
+    guestLogin: '게스트로 계속하기',
   },
 };
 
