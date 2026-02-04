@@ -32,8 +32,10 @@ export function Sidebar() {
 
   // Close sidebar on route change (mobile)
   React.useEffect(() => {
-    close();
-  }, [pathname, close]);
+    if(isOpen){
+      close();
+    }
+  }, [pathname]);
 
   const links = [
     { href: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
