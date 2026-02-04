@@ -32,8 +32,10 @@ export function Sidebar() {
 
   // Close sidebar on route change (mobile)
   React.useEffect(() => {
-    close();
-  }, [pathname, close]);
+    if(isOpen){
+      close();
+    }
+  }, [pathname]);
 
   const links = [
     { href: '/dashboard', label: t('dashboard'), icon: LayoutDashboard },
@@ -105,7 +107,7 @@ export function Sidebar() {
           {user ? (
             <div className="flex items-center gap-3">
               <Image
-                src={userProfile?.photoURL || '/default-avatar.png'}
+                src={userProfile?.photoURL || '/default-avatar.svg'}
                 alt="User"
                 width={40}
                 height={40}
