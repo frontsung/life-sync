@@ -107,7 +107,7 @@ export function Sidebar() {
           {user ? (
             <div className="flex items-center gap-3">
               <Image
-                src={userProfile?.photoURL || '/default-avatar.png'}
+                src={userProfile?.photoURL || '/default-avatar.svg'}
                 alt="User"
                 width={40}
                 height={40}
