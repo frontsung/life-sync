@@ -1,77 +1,39 @@
-# Life Sync - Application Blueprint
+# Blueprint
 
 ## Overview
-Life Sync is a modern, responsive schedule management application designed to work seamlessly on both mobile and desktop devices. It features an interactive calendar, event management capabilities, and a visually appealing user interface.
+This blueprint outlines the current state and planned modifications for the Life Sync application, focusing on resolving a bug related to the mobile menu toggle functionality.
 
 ## Project Outline
-### Current State
-*   **Framework:** Next.js (App Router)
-*   **Language:** TypeScript
-*   **Styling:** Tailwind CSS (v4)
-*   **Data:** Firebase Firestore for Events, Todos, Secret Items, Finance and User Profiles. 
-*   **Firebase:** Initialized with environment variables and Google Sign-In enabled.
-*   **Internationalization:** Custom Context (English/Korean)
-*   **Theme:** Dark/Light mode via `next-themes`
+The Life Sync application is a Next.js project using the App Router. It includes:
+- Authentication managed by Firebase.
+- UI components developed with React, utilizing a custom UI library based on `shadcn/ui` principles.
+- Global state management for theme, language, and sidebar visibility.
+- File-based routing for different sections like dashboard, finance, friends, schedule, secret, and todo.
 
-### Features (Implemented)
-*   **User Authentication:** Google Login and Guest Login functionality via Firebase Authentication.
-*   **Main Entry Screen:** A welcoming landing page (`/`) that redirects authenticated users to the dashboard.
-*   **Route Protection:** Middleware implemented to protect private routes, requiring authentication.
-*   **User Profiles:** Firestore-based user profiles storing basic info, friends, and friend requests.
-*   **Friend Management:** Dedicated `/friends` route for viewing friends, managing friend requests, and adding new friends by email.
-*   **Content Sharing:** Ability to share Calendar events and Secret Space items with selected friends.
-*   **Data Persistence (Migrated):** Events, Todos, and Secret Items are now stored in Firebase Firestore, supporting multi-user and sharing capabilities.
-*   **Responsive Calendar:** Month view with event indicators. Add, update, and delete events with color labels.
-*   **To-Do List:** Daily to-do management with completion toggle, sync with calendar, update, delete, and unlink.
-*   **Finance Tracking:** Add, update, and delete income/expense transactions with categories.
-*   **Secret Space:** Organize notes and folders, create, rename, update content, and delete items.
-*   **Visual Design:** Modern vibrant palette, noise texture, sidebar navigation.
-*   **Dark Mode:** Fully supported.
-*   **Localization:** English and Korean support.
+Key components and their roles:
+- `src/app/layout.tsx`: Root layout, integrating `Providers` and `AuthLayout`.
+- `src/components/providers.tsx`: Wraps the application with various context providers, including `ThemeProvider`, `LanguageProvider`, `SidebarProvider`, and `AuthProvider`.
+- `src/components/AuthLayout.tsx`: Handles authentication checks and conditionally renders `AppLayout` or redirects.
+- `src/lib/hooks/use-auth.tsx`: Manages Firebase authentication state and user profiles.
+- `src/lib/sidebar-context.tsx`: Provides the `isOpen` state and `toggle`/`close` functions for the sidebar.
+- `src/components/ui/navbar.tsx`: Contains the mobile menu toggle button which calls the `toggle` function from `SidebarContext`.
+- `src/components/ui/sidebar.tsx`: Consumes `isOpen` from `SidebarContext` to control sidebar visibility.
 
-## Data Models
-### User Document (Firestore Collection: `users`)
-*   `uid` (string): Firebase Authentication User ID (Document ID)
-*   `email` (string): User's email
-*   `displayName` (string): User's display name (from Google, or custom)
-*   `photoURL` (string): User's profile photo (from Google)
-*   `friends` (array of strings): Array of UIDs of accepted friends.
-*   `friendRequestsSent` (array of strings): Array of UIDs for pending friend requests sent by this user.
-*   `friendRequestsReceived` (array of strings): Array of UIDs for pending friend requests received by this user.
+## Current Plan: Debugging Mobile Menu Toggle Issue
 
-### Calendar Event Document (Firestore Collection: `events`)
-*   `id` (string): Document ID
-*   `ownerUid` (string): UID of the user who owns the event
-*   `title` (string): Event title
-*   `date` (string): ISO date string YYYY-MM-DD
-*   `description` (string, optional)
-*   `color` (string): 'blue' | 'red' | 'green' | 'purple' | 'orange'
-*   `isCompleted` (boolean, optional)
-*   `sharedWith` (array of strings, optional): Array of UIDs of friends with whom this event is shared
+**Problem:** The mobile menu toggle is not behaving as expected. When the toggle button is clicked, the `isOpen` state briefly changes to `true` and then immediately reverts to `false`, preventing the sidebar from staying open.
 
-### Todo Document (Firestore Collection: `todos`)
-*   `id` (string): Document ID
-*   `ownerUid` (string): UID of the user who owns the todo
-*   `text` (string): Todo text
-*   `isCompleted` (boolean)
-*   `date` (string): YYYY-MM-DD (Target date for the todo)
-*   `syncedEventId` (string, optional): ID of the linked calendar event
+**Hypotheses:**
+1.  **Multiple `toggle` calls:** The `toggle` function is being invoked multiple times in quick succession.
+2.  **Immediate `close` call:** The `toggle` function is called to open the sidebar, but another part of the code immediately calls `close` or `setIsOpen(false)`.
+3.  **Component re-rendering/re-mounting:** A parent component is re-rendering in a way that causes `SidebarProvider` to re-initialize its state, or the `Navbar`/toggle button to unmount/remount, leading to state loss or flickering.
+4.  **Strict Mode behavior:** React's Strict Mode (in development) double-invokes effects/render methods, which might be exposing a timing issue.
 
-### Secret Item Document (Firestore Collection: `secretItems`)
-*   `id` (string): Document ID
-*   `ownerUid` (string): UID of the user who owns the secret item
-*   `type` (string): 'folder' | 'note'
-*   `name` (string): Item name
-*   `parentId` (string | null): ID of the parent folder, null for root
-*   `content` (string, optional): Only for notes
-*   `updatedAt` (Firestore Timestamp): Last update timestamp
-*   `sharedWith` (array of strings, optional): Array of UIDs of friends with whom this item is shared
+**Steps to Investigate:**
+1.  **Instrument `toggle` function:** Added `console.log` to `src/lib/sidebar-context.tsx` inside the `toggle` function to observe when it's called and the `isOpen` state. (Completed)
+2.  **Instrument `onClick` handler:** Added `console.log` to `src/components/ui/navbar.tsx` inside the mobile menu toggle button's `onClick` handler to check for multiple click events. (Completed)
+3.  **Analyze console output:** Await user interaction and console output to determine the sequence of events and narrow down the cause.
+    *   If "Mobile menu toggle button clicked" appears once, but "toggle called" appears twice or more, the issue might be in event propagation or React's internal handling.
+    *   If both appear once, but `isOpen` immediately goes `false`, then another mechanism is closing the sidebar.
 
-### Finance Document (Firestore Collection: `finance`)
-*   `id` (string): Document ID
-*   `ownerUid` (string): UID of the user who owns the transaction
-*   `type` (string): 'income' | 'expense'
-*   `amount` (number): Transaction amount
-*   `description` (string)
-*   `date` (string): ISO date string YYYY-MM-DD
-*   `category` (string, optional)
+**Next Action:** Await user feedback on the console output after interacting with the mobile menu toggle.

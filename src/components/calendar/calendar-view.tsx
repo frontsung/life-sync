@@ -198,7 +198,7 @@ export function CalendarView() {
 
   const renderDays = () => {
     const dateFormat = "EEE";
-    const days = [];
+    const days: React.ReactNode[] = [];
     const startDate = startOfWeek(currentMonth, { locale: dateLocale });
 
     for (let i = 0; i < 7; i++) {

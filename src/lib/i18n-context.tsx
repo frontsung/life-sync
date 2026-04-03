@@ -83,6 +83,11 @@ export const dictionaries = {
     googleLogin: 'Sign in with Google',
     or: 'Or',
     guestLogin: 'Continue as Guest',
+    loadingEvents: 'Loading events...',
+    loadingSecretItems: 'Loading secret items...',
+    emptyFolder: 'This folder is empty.',
+    noResults: 'No results found.',
+    loadingTodos: 'Loading to-do items...',
   },
   ko: {
     appTitle: 'Life Sync',
@@ -161,6 +166,11 @@ export const dictionaries = {
     googleLogin: 'Google로 로그인',
     or: '또는',
     guestLogin: '게스트로 계속하기',
+    loadingEvents: '일정을 불러오는 중...',
+    loadingSecretItems: '비밀 항목을 불러오는 중...',
+    emptyFolder: '폴더가 비어 있습니다.',
+    noResults: '검색 결과가 없습니다.',
+    loadingTodos: '할 일을 불러오는 중...',
   },
 };
 
