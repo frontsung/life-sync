@@ -50,7 +50,8 @@ export function Sidebar() {
     try {
       await signOut(auth); // Sign out from Firebase on the client
       await fetch('/api/sessionLogout', { method: 'POST' }); // Clear server session
-      router.push('/');
+      router.refresh();
+      router.push('/login');
     } catch (error) {
       console.error('Error during logout:', error);
     }

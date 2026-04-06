@@ -41,6 +41,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           photoURL: firebaseUser.photoURL,
         }, token);
 
+        // Log the session to the server
+        try {
+          await fetch('/api/sessionLogin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: token }),
+          });
+        } catch (error) {
+          console.error("Error logging session to server:", error);
+        }
+
         // And set all state at once
         if (profile && 'error' in profile) {
           console.error("Error getting user profile:", profile.error);
@@ -52,14 +63,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isLoading: false,
           });
         }
-        
-        // Log the session to the server
-        fetch('/api/sessionLogin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken: token }),
-        });
-
       } else {
         // User is signed out
         setAuthState({ user: null, userProfile: null, isLoading: false });

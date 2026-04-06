@@ -18,7 +18,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
   React.useEffect(() => {
     if (!isLoading && user && isPublic) {
+      router.refresh();
       router.replace('/dashboard');
+    }
+    if (!isLoading && !user && !isPublic) {
+      router.refresh();
+      router.replace('/login');
     }
   }, [isLoading, user, isPublic, router]);
 
