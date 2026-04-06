@@ -69,25 +69,6 @@ export async function getOrCreateUserProfile(firebaseUser: SimpleUser, idToken: 
   }
 }
 
-// --- Auth Actions ---
-/*
-export async function logout() {
-  console.log("Server action: logout");
-  try {
-    await signOut(auth);
-    // Call the API route to clear the server-side session cookie
-    await fetch('http://localhost:3000/api/sessionLogout', {
-      method: 'POST',
-    });
-    return { success: true, message: 'Logged out successfully' };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to logout';
-    console.error('Error during logout:', errorMessage);
-    return { success: false, message: errorMessage };
-  }
-}
-*/
-
 // --- User & Friend Management Actions ---
 
 export async function getUserProfile(uid: string, idToken: string): Promise<UserProfile | { error: string } | null> {
