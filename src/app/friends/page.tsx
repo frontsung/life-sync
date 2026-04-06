@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/hooks/use-auth';
 import { Loader2 } from 'lucide-react';
 import { FriendsList } from '@/components/friends/friends-list'; // Will create this
 import { AddFriend } from '@/components/friends/add-friend';   // Will create this
+import { UserProfile } from '@/lib/types';
 
 export default function FriendsPage() {
   const router = useRouter();
@@ -29,8 +30,8 @@ export default function FriendsPage() {
   }
 
   // TODO: Fetch friends data from Firestore
-  const friends = [];
-  const friendRequests = [];
+  const friends: UserProfile[] = [];
+  const friendRequests: UserProfile[] = [];
 
   return (
     <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">

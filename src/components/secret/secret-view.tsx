@@ -103,7 +103,7 @@ export function SecretView() {
   const isSearching = searchQuery.length > 0;
   
   const currentItems = React.useMemo(() => {
-    let filtered = [];
+    let filtered: SecretItem[] = [];
     if (isSearching) {
       filtered = secretItems.filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
     } else {
@@ -117,7 +117,7 @@ export function SecretView() {
 
   const breadcrumbs = React.useMemo(() => {
     if (isSearching) return [];
-    const path = [];
+    const path: SecretItem[] = [];
     let currentId = currentFolderId;
     while (currentId) {
       const folder = secretItems.find(i => i.id === currentId);
